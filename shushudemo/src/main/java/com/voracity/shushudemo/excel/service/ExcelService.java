@@ -28,4 +28,11 @@ public interface ExcelService {
      * @param response HTTP响应
      */
     void downloadImportTemplate(HttpServletResponse response);
+    
+    /**
+     * 多线程分页导出PhoneNumbers数据
+     * @param response HTTP响应
+     * @param count 导出数据条数
+     */
+    void exportPhoneNumbersMultiThread(HttpServletResponse response, int count);
 }

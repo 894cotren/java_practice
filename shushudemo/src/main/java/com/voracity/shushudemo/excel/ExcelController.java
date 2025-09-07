@@ -26,13 +26,14 @@ public class ExcelController {
     }
 
     /**
-     * 导出PhoneNumbers数据
+     * 导出PhoneNumbers数据（多线程分页查询+合并写入）
      * @param response HTTP响应
-     * @param  生成数据条数，默认100条
+     * @param count 导出数据条数，默认100万条
      */
     @GetMapping("/export")
-    public void exportPhoneNumbers(HttpServletResponse response) {
-        return;
+    public void exportPhoneNumbers(HttpServletResponse response, 
+                                  @RequestParam(defaultValue = "1000000") int count) {
+        excelService.exportPhoneNumbersMultiThread(response, count);
     }
 
     /**
@@ -41,7 +42,7 @@ public class ExcelController {
      * @param count 生成数据条数，默认100条
      */
     @GetMapping("/exportTextData")
-    public void exportPhoneNumbers(HttpServletResponse response, 
+    public void exportPhoneNumbersTextData(HttpServletResponse response,
                                   @RequestParam(defaultValue = "100") int count) {
         // 生成测试数据
         List<PhoneNumbersExportDTO> dataList = excelService.generateTestData(count);

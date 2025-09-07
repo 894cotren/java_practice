@@ -10,6 +10,7 @@ import com.voracity.shushudemo.excel.service.ExcelReadListener;
 import com.voracity.shushudemo.excel.service.ExcelService;
 import com.voracity.shushudemo.excel.service.PhoneNumbersService;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,12 +23,18 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 @Service
 public class ExcelServiceImpl implements ExcelService {
 
     @Resource
     private PhoneNumbersService phoneNumbersService;
+
+    @Resource
+    private ThreadPoolTaskExecutor exportTaskExecutor;
 
     @Resource
     private ThreadPoolTaskExecutor excelTaskExecutor;
@@ -198,6 +205,81 @@ public class ExcelServiceImpl implements ExcelService {
         } catch (IOException e) {
             e.printStackTrace();
             throw new RuntimeException("模板下载失败");
+        }
+    }
+
+    @Override
+    public void exportPhoneNumbersMultiThread(HttpServletResponse response, int count) {
+        try {
+            long startTime = System.currentTimeMillis();
+            
+            // 设置响应头
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("utf-8");
+            String fileName = URLEncoder.encode("电话号码数据_" + System.currentTimeMillis(), "UTF-8");
+            response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
+            
+            // 计算分页参数
+            int pageSize = 10000; // 每页1万条数据
+            int totalPages = (count + pageSize - 1) / pageSize;
+            
+            System.out.println("开始多线程导出，总数据量: " + count + "，分页数: " + totalPages + "，每页: " + pageSize);
+            
+            // 使用线程池并行查询所有页面
+            List<CompletableFuture<List<PhoneNumbersExportDTO>>> futures = new ArrayList<>();
+            
+            for (int i = 0; i < totalPages; i++) {
+                final int pageNum = i;
+                CompletableFuture<List<PhoneNumbersExportDTO>> future = CompletableFuture.supplyAsync(() -> {
+                    try {
+                        // 分页查询数据
+                        Page<PhoneNumbers> page = new Page<>(pageNum + 1, pageSize);
+                        List<PhoneNumbers> data = phoneNumbersService.page(page).getRecords();
+                        
+                        // 转换为DTO
+                        List<PhoneNumbersExportDTO> dtoList = data.stream()
+                                .map(PhoneNumbersExportDTO::fromEntity)
+                                .collect(Collectors.toList());
+                        
+                        System.out.println("线程 " + Thread.currentThread().getName() + " 完成第 " + (pageNum + 1) + " 页查询，数据量: " + dtoList.size());
+                        return dtoList;
+                    } catch (Exception e) {
+                        System.err.println("第 " + (pageNum + 1) + " 页查询失败: " + e.getMessage());
+                        return new ArrayList<>();
+                    }
+                }, exportTaskExecutor);
+                futures.add(future);
+            }
+            
+            // 等待所有查询完成并合并结果
+            List<PhoneNumbersExportDTO> allData = new ArrayList<>();
+            for (int i = 0; i < futures.size(); i++) {
+                try {
+                    List<PhoneNumbersExportDTO> pageData = futures.get(i).get();
+                    allData.addAll(pageData);
+                    System.out.println("已合并第 " + (i + 1) + " 页数据，当前总数据量: " + allData.size());
+                } catch (InterruptedException | ExecutionException e) {
+                    System.err.println("获取第 " + (i + 1) + " 页数据失败: " + e.getMessage());
+                }
+            }
+            
+            long queryEndTime = System.currentTimeMillis();
+            System.out.println("数据查询完成，耗时: " + (queryEndTime - startTime) + "ms，实际数据量: " + allData.size());
+            
+            // 写入Excel
+            EasyExcel.write(response.getOutputStream(), PhoneNumbersExportDTO.class)
+                    .sheet("电话号码数据")
+                    .doWrite(allData);
+            
+            long endTime = System.currentTimeMillis();
+            System.out.println("Excel导出完成，总耗时: " + (endTime - startTime) + "ms");
+            
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Excel导出失败: " + e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("导出过程中发生错误: " + e.getMessage());
         }
     }
 }
