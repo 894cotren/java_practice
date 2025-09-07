@@ -1,0 +1,52 @@
+server:
+  port: 8123
+  servlet:
+    context-path: /api
+    session:
+      #前端cookie 15天过期   匹配 session15天过期。 实现登录15天过期
+      cookie:
+        max-age: 1296000
+        # 设置Cookie域名，确保在域名下正确传递
+#        domain: memehub.icu
+        # 设置Cookie路径
+        path: /
+        # 设置Cookie安全属性（HTTP环境下设为false）
+        secure: false
+        http-only: true
+        same-site: lax
+      # 明确设置session超时时间，防止被Tomcat默认值覆盖
+      timeout: 1296000s
+spring:
+  application:
+    name: shushudemo
+  profiles:
+    active: local
+  #文件上传大小限制设置为10mb（默认1mb），这里得是servlet得限制，我们代码里面也是配置得10mb
+  servlet:
+    multipart:
+      max-file-size: 10MB
+  #配置session存储15天过期   "我们session目前只存储了登录用户的信息"
+  session:
+    timeout: 1296000s
+    # 禁用Spring Session的store-type，强制使用默认的内存存储
+    store-type: none
+
+# 调试配置 - 启用session调试信息
+logging:
+  level:
+    org.springframework.session: DEBUG
+    org.springframework.security: DEBUG
+    org.springframework.web.servlet: DEBUG
+
+# mybatis-plus配置信息
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: is_delete # 全局逻辑删除字段名
+      logic-delete-value: 1 # 逻辑已删除值。可选，默认值为 1
+      logic-not-delete-value: 0 # 逻辑未删除值。可选，默认值为 0
+
+

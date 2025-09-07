@@ -1,0 +1,15 @@
+
+spring:
+  #mysql数据库配置信息
+  datasource:
+    url: jdbc:mysql://192.168.83.123:3306/my_test?serverTimezone=Asia/Shanghai
+    username: root
+    password: 23321212
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  # Redis 配置
+  redis:
+    database: 0
+    host: 192.168.83.123
+    port: 6379
+    timeout: 5000
+
