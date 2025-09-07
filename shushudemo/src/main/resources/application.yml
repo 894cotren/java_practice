@@ -21,10 +21,14 @@ spring:
     name: shushudemo
   profiles:
     active: local
-  #文件上传大小限制设置为10mb（默认1mb），这里得是servlet得限制，我们代码里面也是配置得10mb
+  #文件上传大小限制设置为500MB，支持百万数据导入
   servlet:
     multipart:
-      max-file-size: 10MB
+      max-file-size: 500MB
+      max-request-size: 500MB
+      enabled: true
+      file-size-threshold: 2KB
+      location: ${java.io.tmpdir}
   #配置session存储15天过期   "我们session目前只存储了登录用户的信息"
   session:
     timeout: 1296000s

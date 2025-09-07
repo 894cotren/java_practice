@@ -9,6 +9,7 @@ import com.voracity.shushudemo.excel.model.PhoneNumbersImportTemplate;
 import com.voracity.shushudemo.excel.service.ExcelReadListener;
 import com.voracity.shushudemo.excel.service.ExcelService;
 import com.voracity.shushudemo.excel.service.PhoneNumbersService;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -28,12 +29,15 @@ public class ExcelServiceImpl implements ExcelService {
     @Resource
     private PhoneNumbersService phoneNumbersService;
 
+    @Resource
+    private ThreadPoolTaskExecutor excelTaskExecutor;
+
     @Override
     public void importExcelModel(MultipartFile file) {
         try {
             InputStream inputStream = file.getInputStream();
             // 使用导入DTO读取Excel，通过构造函数注入PhoneNumbersService
-            ExcelReadListener listener = new ExcelReadListener(phoneNumbersService);
+            ExcelReadListener listener = new ExcelReadListener(phoneNumbersService,excelTaskExecutor);
             EasyExcel.read(inputStream, PhoneNumbersImportDTO.class, listener)
                     .sheet()
                     .doRead();

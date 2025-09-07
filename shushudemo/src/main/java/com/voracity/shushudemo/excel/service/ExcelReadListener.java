@@ -5,8 +5,8 @@ import com.alibaba.excel.event.AnalysisEventListener;
 import com.voracity.shushudemo.excel.model.PhoneNumbers;
 import com.voracity.shushudemo.excel.model.PhoneNumbersImportDTO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 
-import javax.annotation.Resource;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,17 +19,22 @@ public class ExcelReadListener extends AnalysisEventListener<PhoneNumbersImportD
 
     private final PhoneNumbersService phoneNumbersService;
 
+
+    private final ThreadPoolTaskExecutor excelTaskExecutor;
+
+
     /**
      * 构造函数注入PhoneNumbersService
      */
-    public ExcelReadListener(PhoneNumbersService phoneNumbersService) {
+    public ExcelReadListener(PhoneNumbersService phoneNumbersService, ThreadPoolTaskExecutor excelTaskExecutor) {
         this.phoneNumbersService = phoneNumbersService;
+        this.excelTaskExecutor = excelTaskExecutor;
     }
 
     /**
      * 批量插入的数组大小
      */
-    private final int INSERT_BATCH_SIZE = 50;
+    private final int INSERT_BATCH_SIZE = 500;
 
     /**
      * 批量插入用数组
@@ -70,9 +75,9 @@ public class ExcelReadListener extends AnalysisEventListener<PhoneNumbersImportD
             PhoneNumbers phoneNumbers = importDTO.toEntity();
             dataList.add(phoneNumbers);
             successCount++;
-            // 批量处理
-            if (dataList.size() >= INSERT_BATCH_SIZE) {
-                batchInsert();
+            // 达到分块数标准，进行一个插入
+            if (dataList.size()>=INSERT_BATCH_SIZE){
+                fenPian();
             }
         } catch (Exception e) {
             //关于数据异常处理。
@@ -107,7 +112,6 @@ public class ExcelReadListener extends AnalysisEventListener<PhoneNumbersImportD
             return;
         }
         try {
-            // TODO: 这里应该调用PhoneNumbersService进行批量插入
              phoneNumbersService.saveBatch(dataList);
             log.info("批量插入 {} 条数据", dataList.size());
             // 清理内存
@@ -117,6 +121,24 @@ public class ExcelReadListener extends AnalysisEventListener<PhoneNumbersImportD
             // 清理内存
             dataList.clear();
         }
+    }
+
+    /**
+     * 分片处理
+     * 创建新集合，避免并发修改。
+     * 异步处理插入数据
+     *
+     */
+    public void fenPian(){
+        // 创建新的集合，避免并发修改
+        List<PhoneNumbers> batchToInsert = new ArrayList<>(dataList);
+        dataList.clear();
+
+        // 异步处理
+        excelTaskExecutor.execute(() -> {
+            phoneNumbersService.saveBatch(batchToInsert);
+            log.info("批量插入 {} 条数据", batchToInsert.size());
+        });
     }
     
     /**
