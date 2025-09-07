@@ -26,6 +26,16 @@ public class ExcelController {
     }
 
     /**
+     * 导出PhoneNumbers数据
+     * @param response HTTP响应
+     * @param  生成数据条数，默认100条
+     */
+    @GetMapping("/export")
+    public void exportPhoneNumbers(HttpServletResponse response) {
+        return;
+    }
+
+    /**
      * 导出PhoneNumbers数据到Excel
      * @param response HTTP响应
      * @param count 生成数据条数，默认100条

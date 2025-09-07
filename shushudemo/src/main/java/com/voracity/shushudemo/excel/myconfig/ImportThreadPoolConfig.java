@@ -13,10 +13,10 @@ public class ImportThreadPoolConfig {
     public ThreadPoolTaskExecutor excelTaskExecutor() {
         ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
         // 根据服务器CPU核心数设置
-        int corePoolSize = Runtime.getRuntime().availableProcessors() * 2;
+        int corePoolSize = Runtime.getRuntime().availableProcessors() * 3;
         executor.setCorePoolSize(corePoolSize);
         executor.setMaxPoolSize(corePoolSize * 2);
-        executor.setQueueCapacity(100);
+        executor.setQueueCapacity(500);
         executor.setThreadNamePrefix("excelTaskThread-");
         executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
         executor.setWaitForTasksToCompleteOnShutdown(true);

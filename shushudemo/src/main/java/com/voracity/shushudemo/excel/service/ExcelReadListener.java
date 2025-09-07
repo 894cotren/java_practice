@@ -34,7 +34,7 @@ public class ExcelReadListener extends AnalysisEventListener<PhoneNumbersImportD
     /**
      * 批量插入的数组大小
      */
-    private final int INSERT_BATCH_SIZE = 500;
+    private final int INSERT_BATCH_SIZE = 3000;
 
     /**
      * 批量插入用数组
