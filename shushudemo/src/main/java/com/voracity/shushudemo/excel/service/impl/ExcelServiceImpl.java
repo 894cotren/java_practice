@@ -1,6 +1,8 @@
 package com.voracity.shushudemo.excel.service.impl;
 
 import com.alibaba.excel.EasyExcel;
+import com.alibaba.excel.ExcelWriter;
+import com.alibaba.excel.write.metadata.WriteSheet;
 import com.voracity.shushudemo.excel.ExcelModel;
 import com.voracity.shushudemo.excel.model.PhoneNumbers;
 import com.voracity.shushudemo.excel.model.PhoneNumbersExportDTO;
@@ -11,6 +13,7 @@ import com.voracity.shushudemo.excel.service.ExcelService;
 import com.voracity.shushudemo.excel.service.PhoneNumbersService;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -273,6 +276,74 @@ public class ExcelServiceImpl implements ExcelService {
             
             long endTime = System.currentTimeMillis();
             System.out.println("Excel导出完成，总耗时: " + (endTime - startTime) + "ms");
+            
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Excel导出失败: " + e.getMessage());
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw new RuntimeException("导出过程中发生错误: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void exportPhoneNumbersPaged(HttpServletResponse response, int count) {
+        try {
+            long startTime = System.currentTimeMillis();
+            
+            // 设置响应头
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("utf-8");
+            String fileName = URLEncoder.encode("电话号码数据_" + System.currentTimeMillis(), "UTF-8");
+            response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
+            
+            // 限制最大导出数量，避免Excel行数限制
+            int maxRows = 1000000; // Excel最大支持1048576行，我们限制为100万行
+            if (count > maxRows) {
+                count = maxRows;
+                System.out.println("数据量超过限制，调整为最大导出: " + maxRows + " 条");
+            }
+            
+            // 分页参数
+            int pageSize = 10000; // 每页1万条数据
+            int totalPages = (count + pageSize - 1) / pageSize;
+            
+            System.out.println("开始分页导出，总数据量: " + count + "，分页数: " + totalPages + "，每页: " + pageSize);
+            
+            // 使用分批写入的方式
+            try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), PhoneNumbersExportDTO.class).build()) {
+                WriteSheet writeSheet = EasyExcel.writerSheet("电话号码数据").build();
+                
+                for (int i = 0; i < totalPages; i++) {
+                    long pageStartTime = System.currentTimeMillis();
+                    
+                    // 使用LIMIT分页查询，确保分页生效
+                    int offset = i * pageSize;
+                    List<PhoneNumbers> data = phoneNumbersService.list(
+                        new QueryWrapper<PhoneNumbers>()
+                            .last("LIMIT " + offset + ", " + pageSize)
+                    );
+                    
+                    // 转换为DTO
+                    List<PhoneNumbersExportDTO> dtoList = data.stream()
+                            .map(PhoneNumbersExportDTO::fromEntity)
+                            .collect(Collectors.toList());
+                    
+                    // 写入Excel
+                    excelWriter.write(dtoList, writeSheet);
+                    
+                    long pageEndTime = System.currentTimeMillis();
+                    System.out.println("第 " + (i + 1) + " 页处理完成，数据量: " + dtoList.size() + 
+                                     "，耗时: " + (pageEndTime - pageStartTime) + "ms");
+                    
+                    // 清理内存
+                    dtoList.clear();
+                    data.clear();
+                }
+            }
+            
+            long endTime = System.currentTimeMillis();
+            System.out.println("分页导出完成，总耗时: " + (endTime - startTime) + "ms");
             
         } catch (IOException e) {
             e.printStackTrace();

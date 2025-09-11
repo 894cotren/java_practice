@@ -35,4 +35,11 @@ public interface ExcelService {
      * @param count 导出数据条数
      */
     void exportPhoneNumbersMultiThread(HttpServletResponse response, int count);
+    
+    /**
+     * 分页读写导出PhoneNumbers数据（内存友好）
+     * @param response HTTP响应
+     * @param count 导出数据条数
+     */
+    void exportPhoneNumbersPaged(HttpServletResponse response, int count);
 }

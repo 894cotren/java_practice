@@ -19,7 +19,7 @@ public class ImportThreadPoolConfig {
         executor.setMaxPoolSize(corePoolSize * 2);
         executor.setQueueCapacity(500);
         executor.setThreadNamePrefix("excelThread-");
-        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy()); // 队列满后，当前线程去执行；
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(600);
         return executor;
