@@ -305,7 +305,7 @@ public class ExcelServiceImpl implements ExcelService {
             }
             
             // 分页参数
-            int pageSize = 10000; // 每页1万条数据
+            int pageSize = 50000; // 每页1万条数据
             int totalPages = (count + pageSize - 1) / pageSize;
             
             System.out.println("开始分页导出，总数据量: " + count + "，分页数: " + totalPages + "，每页: " + pageSize);
@@ -314,15 +314,20 @@ public class ExcelServiceImpl implements ExcelService {
             try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), PhoneNumbersExportDTO.class).build()) {
                 WriteSheet writeSheet = EasyExcel.writerSheet("电话号码数据").build();
                 
-                for (int i = 0; i < totalPages; i++) {
+                // 使用MyBatis手写SQL的游标分页查询
+                int lastId = 0;  // 游标起始ID
+                int pageNum = 1;
+                
+                while (true) {
                     long pageStartTime = System.currentTimeMillis();
                     
-                    // 使用LIMIT分页查询，确保分页生效
-                    int offset = i * pageSize;
-                    List<PhoneNumbers> data = phoneNumbersService.list(
-                        new QueryWrapper<PhoneNumbers>()
-                            .last("LIMIT " + offset + ", " + pageSize)
-                    );
+                    // 使用MyBatis手写SQL进行游标分页查询
+                    List<PhoneNumbers> data = phoneNumbersService.selectByCursorPaging(lastId, pageSize);
+                    
+                    if (data.isEmpty()) break;  // 没有更多数据，退出循环
+                    
+                    // 更新游标
+                    lastId = data.get(data.size() - 1).getId();
                     
                     // 转换为DTO
                     List<PhoneNumbersExportDTO> dtoList = data.stream()
@@ -333,12 +338,13 @@ public class ExcelServiceImpl implements ExcelService {
                     excelWriter.write(dtoList, writeSheet);
                     
                     long pageEndTime = System.currentTimeMillis();
-                    System.out.println("第 " + (i + 1) + " 页处理完成，数据量: " + dtoList.size() + 
+                    System.out.println("第 " + pageNum + " 页处理完成，数据量: " + dtoList.size() + 
                                      "，耗时: " + (pageEndTime - pageStartTime) + "ms");
                     
                     // 清理内存
                     dtoList.clear();
                     data.clear();
+                    pageNum++;
                 }
             }
             

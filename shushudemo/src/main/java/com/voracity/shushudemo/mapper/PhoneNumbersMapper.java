@@ -4,6 +4,7 @@ import com.voracity.shushudemo.excel.model.PhoneNumbers;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
@@ -28,6 +29,20 @@ public interface PhoneNumbersMapper extends BaseMapper<PhoneNumbers> {
             "</foreach>" +
             "</script>")
     int batchInsertCustom(@Param("list") List<PhoneNumbers> phoneNumbersList);
+
+    /**
+     * 使用游标分页查询电话号码数据
+     * 避免MySQL不支持LIMIT & IN子查询的问题
+     * @param lastId 上一页最后一条记录的ID
+     * @param pageSize 每页大小
+     * @return 分页数据列表
+     */
+    @Select("SELECT id, name, phone_number, status, email, city, created_at " +
+            "FROM phone_numbers " +
+            "WHERE id > #{lastId} " +
+            "ORDER BY id ASC " +
+            "LIMIT #{pageSize}")
+    List<PhoneNumbers> selectByCursorPaging(@Param("lastId") int lastId, @Param("pageSize") int pageSize);
 }
 
 

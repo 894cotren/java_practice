@@ -19,4 +19,13 @@ public interface PhoneNumbersService extends IService<PhoneNumbers> {
      * @return 是否插入成功
      */
     boolean saveBatchCustom(List<PhoneNumbers> entityList);
+
+    /**
+     * 使用游标分页查询电话号码数据
+     * 避免MySQL不支持LIMIT & IN子查询的问题
+     * @param lastId 上一页最后一条记录的ID
+     * @param pageSize 每页大小
+     * @return 分页数据列表
+     */
+    List<PhoneNumbers> selectByCursorPaging(int lastId, int pageSize);
 }
