@@ -39,4 +39,19 @@ public class ImportThreadPoolConfig {
         executor.setAwaitTerminationSeconds(600);
         return executor;
     }
+
+    @Bean("exportQueryExecutor")
+    public ThreadPoolTaskExecutor exportQueryExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        // 导出查询专用线程池，专门用于多线程分页查询
+        int corePoolSize = Runtime.getRuntime().availableProcessors() * 3; // 更多线程用于查询
+        executor.setCorePoolSize(corePoolSize);
+        executor.setMaxPoolSize(corePoolSize * 2);
+        executor.setQueueCapacity(2000); // 更大的队列
+        executor.setThreadNamePrefix("exportQueryThread-");
+        executor.setRejectedExecutionHandler(new ThreadPoolExecutor.CallerRunsPolicy());
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(600);
+        return executor;
+    }
 }

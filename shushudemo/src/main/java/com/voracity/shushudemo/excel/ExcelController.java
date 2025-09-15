@@ -33,7 +33,30 @@ public class ExcelController {
     @GetMapping("/export")
     public void exportPhoneNumbers(HttpServletResponse response, 
                                   @RequestParam(defaultValue = "1000000") int count) {
-        excelService.exportPhoneNumbersPaged(response, count);
+//        excelService.exportPhoneNumbersPaged(response, count);
+        excelService.exportPhoneNumbersMultiThreadQuery(response, count);
+    }
+
+    /**
+     * 多线程查询导出PhoneNumbers数据
+     * @param response HTTP响应
+     * @param count 导出数据条数，默认100万条
+     */
+    @GetMapping("/exportMultiThread")
+    public void exportPhoneNumbersMultiThread(HttpServletResponse response, 
+                                             @RequestParam(defaultValue = "1000000") int count) {
+        excelService.exportPhoneNumbersMultiThreadQuery(response, count);
+    }
+
+    /**
+     * 多线程查询导出PhoneNumbers数据（使用submit方式）
+     * @param response HTTP响应
+     * @param count 导出数据条数，默认100万条
+     */
+    @GetMapping("/exportMultiThreadSubmit")
+    public void exportPhoneNumbersMultiThreadSubmit(HttpServletResponse response, 
+                                                   @RequestParam(defaultValue = "1000000") int count) {
+        excelService.exportPhoneNumbersMultiThreadQueryWithSubmit(response, count);
     }
 
     /**

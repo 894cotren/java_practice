@@ -28,6 +28,8 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
 @Service
@@ -38,6 +40,9 @@ public class ExcelServiceImpl implements ExcelService {
 
     @Resource
     private ThreadPoolTaskExecutor exportTaskExecutor;
+
+    @Resource
+    private ThreadPoolTaskExecutor exportQueryExecutor;
 
     @Resource
     private ThreadPoolTaskExecutor excelTaskExecutor;
@@ -357,6 +362,250 @@ public class ExcelServiceImpl implements ExcelService {
         } catch (Exception e) {
             e.printStackTrace();
             throw new RuntimeException("导出过程中发生错误: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void exportPhoneNumbersMultiThreadQuery(HttpServletResponse response, int count) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            // 设置响应头
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("utf-8");
+            String fileName = URLEncoder.encode("电话号码数据_多线程查询_" + System.currentTimeMillis(), "UTF-8");
+            response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
+            
+            // 限制最大导出数量，避免Excel行数限制
+            int maxRows = 1000000; // Excel最大支持1048576行，我们限制为100万行
+            if (count > maxRows) {
+                count = maxRows;
+                System.out.println("数据量超过限制，调整为最大导出: " + maxRows + " 条");
+            }
+            
+            // 分页参数
+            int pageSize = 50000; // 每页5万条数据
+            int totalPages = (count + pageSize - 1) / pageSize;
+            
+            System.out.println("开始多线程分页查询导出，总数据量: " + count + "，分页数: " + totalPages + "，每页: " + pageSize);
+            
+            // 使用信号量控制并发查询数量，避免数据库连接池耗尽
+            Semaphore semaphore = new Semaphore(5); // 最多5个并发查询
+            
+            // 使用分批写入的方式
+            try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), PhoneNumbersExportDTO.class).build()) {
+                WriteSheet writeSheet = EasyExcel.writerSheet("电话号码数据").build();
+                
+                // 创建分页查询任务列表
+                List<CompletableFuture<List<PhoneNumbersExportDTO>>> futures = new ArrayList<>();
+                
+                // 先获取所有页的起始ID，然后提交查询任务
+                List<Integer> pageStartIds = new ArrayList<>();
+                int currentId = 0;
+                for (int i = 0; i < totalPages; i++) {
+                    pageStartIds.add(currentId);
+                    currentId += pageSize; // 预估下一个页的起始ID
+                }
+                
+                // 提交所有分页查询任务到线程池
+                for (int i = 0; i < totalPages; i++) {
+                    final int pageIndex = i;
+                    final int startId = pageStartIds.get(i);
+                    
+                    CompletableFuture<List<PhoneNumbersExportDTO>> future = CompletableFuture.supplyAsync(() -> {
+                        try {
+                            semaphore.acquire(); // 获取信号量
+                            
+                            long queryStartTime = System.currentTimeMillis();
+                            
+                            // 使用游标分页查询
+                            List<PhoneNumbers> data = phoneNumbersService.selectByCursorPaging(startId, pageSize);
+                            
+                            // 转换为DTO
+                            List<PhoneNumbersExportDTO> dtoList = data.stream()
+                                    .map(PhoneNumbersExportDTO::fromEntity)
+                                    .collect(Collectors.toList());
+                            
+                            long queryEndTime = System.currentTimeMillis();
+                            System.out.println("第 " + (pageIndex + 1) + " 页查询完成，数据量: " + dtoList.size() + 
+                                             "，耗时: " + (queryEndTime - queryStartTime) + "ms");
+                            
+                            return dtoList;
+                            
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            System.err.println("第 " + (pageIndex + 1) + " 页查询被中断");
+                            return new ArrayList<>();
+                        } catch (Exception e) {
+                            System.err.println("第 " + (pageIndex + 1) + " 页查询失败: " + e.getMessage());
+                            return new ArrayList<>();
+                        } finally {
+                            semaphore.release(); // 释放信号量
+                        }
+                    }, exportQueryExecutor);
+                    
+                    futures.add(future);
+                }
+                
+                // 单线程顺序写入Excel（保证数据顺序）
+                System.out.println("开始单线程顺序写入Excel...");
+                long writeStartTime = System.currentTimeMillis();
+                
+                for (int i = 0; i < futures.size(); i++) {
+                    try {
+                        List<PhoneNumbersExportDTO> dtoList = futures.get(i).get(); // 等待查询完成
+                        
+                        if (!dtoList.isEmpty()) {
+                            excelWriter.write(dtoList, writeSheet);
+                            System.out.println("第 " + (i + 1) + " 页写入完成，数据量: " + dtoList.size());
+                        }
+                        
+                        // 清理内存
+                        dtoList.clear();
+                        
+                    } catch (Exception e) {
+                        System.err.println("第 " + (i + 1) + " 页写入失败: " + e.getMessage());
+                    }
+                }
+                long writeEndTime = System.currentTimeMillis();
+                System.out.println("Excel写入完成，耗时: " + (writeEndTime - writeStartTime) + "ms");
+            }
+            
+            long endTime = System.currentTimeMillis();
+            System.out.println("多线程查询导出完成，总耗时: " + (endTime - startTime) + "ms");
+            
+        } catch (Exception e) {
+            System.err.println("多线程查询导出过程中发生错误: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("多线程查询导出过程中发生错误: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void exportPhoneNumbersMultiThreadQueryWithSubmit(HttpServletResponse response, int count) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            // 设置响应头
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("utf-8");
+            String fileName = URLEncoder.encode("电话号码数据_多线程查询Submit_" + System.currentTimeMillis(), "UTF-8");
+            response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
+            
+            // 限制最大导出数量，避免Excel行数限制
+            int maxRows = 1000000;
+            if (count > maxRows) {
+                count = maxRows;
+                System.out.println("数据量超过限制，调整为最大导出: " + maxRows + " 条");
+            }
+            
+            // 分页参数
+            int pageSize = 50000;
+            int totalPages = (count + pageSize - 1) / pageSize;
+            
+            System.out.println("开始多线程分页查询导出（Submit方式），总数据量: " + count + "，分页数: " + totalPages + "，每页: " + pageSize);
+            
+            // 使用信号量控制并发查询数量
+            Semaphore semaphore = new Semaphore(5);
+            
+            // 使用分批写入的方式
+            try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), PhoneNumbersExportDTO.class).build()) {
+                WriteSheet writeSheet = EasyExcel.writerSheet("电话号码数据").build();
+                
+                // 创建分页查询任务列表（使用Future）
+                List<Future<List<PhoneNumbersExportDTO>>> futures = new ArrayList<>();
+                
+                // 先获取所有页的起始ID
+                List<Integer> pageStartIds = new ArrayList<>();
+                int currentId = 0;
+                for (int i = 0; i < totalPages; i++) {
+                    pageStartIds.add(currentId);
+                    currentId += pageSize;
+                }
+                
+                // 使用submit方式提交所有分页查询任务到线程池
+                for (int i = 0; i < totalPages; i++) {
+                    final int pageIndex = i;
+                    final int startId = pageStartIds.get(i);
+                    
+                    // 使用submit方式提交任务
+                    Future<List<PhoneNumbersExportDTO>> future = exportQueryExecutor.submit(() -> {
+                        try {
+                            semaphore.acquire(); // 获取信号量
+                            
+                            long queryStartTime = System.currentTimeMillis();
+                            
+                            // 使用游标分页查询
+                            List<PhoneNumbers> data = phoneNumbersService.selectByCursorPaging(startId, pageSize);
+                            
+                            // 转换为DTO
+                            List<PhoneNumbersExportDTO> dtoList = data.stream()
+                                    .map(PhoneNumbersExportDTO::fromEntity)
+                                    .collect(Collectors.toList());
+                            
+                            long queryEndTime = System.currentTimeMillis();
+                            System.out.println("第 " + (pageIndex + 1) + " 页查询完成，数据量: " + dtoList.size() + 
+                                             "，耗时: " + (queryEndTime - queryStartTime) + "ms");
+                            
+                            return dtoList;
+                            
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            System.err.println("第 " + (pageIndex + 1) + " 页查询被中断");
+                            return new ArrayList<>();
+                        } catch (Exception e) {
+                            System.err.println("第 " + (pageIndex + 1) + " 页查询失败: " + e.getMessage());
+                            return new ArrayList<>();
+                        } finally {
+                            semaphore.release(); // 释放信号量
+                        }
+                    });
+                    
+                    futures.add(future);
+                }
+                
+                // 单线程顺序写入Excel（保证数据顺序）
+                System.out.println("开始单线程顺序写入Excel...");
+                long writeStartTime = System.currentTimeMillis();
+                
+                for (int i = 0; i < futures.size(); i++) {
+                    try {
+                        System.out.println("开始等待第 " + (i + 1) + " 页查询结果...");
+                        long waitStartTime = System.currentTimeMillis();
+                        
+                        // 使用Future.get()等待查询完成 - 这里会阻塞！
+                        List<PhoneNumbersExportDTO> dtoList = futures.get(i).get();
+                        
+                        long waitEndTime = System.currentTimeMillis();
+                        System.out.println("第 " + (i + 1) + " 页查询结果获取完成，等待耗时: " + (waitEndTime - waitStartTime) + "ms");
+                        
+                        if (!dtoList.isEmpty()) {
+                            excelWriter.write(dtoList, writeSheet);
+                            System.out.println("第 " + (i + 1) + " 页写入完成，数据量: " + dtoList.size());
+                        }
+                        
+                        // 清理内存
+                        dtoList.clear();
+                        
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        System.err.println("第 " + (i + 1) + " 页写入被中断");
+                    } catch (ExecutionException e) {
+                        System.err.println("第 " + (i + 1) + " 页写入失败: " + e.getCause().getMessage());
+                    }
+                }
+                
+                long writeEndTime = System.currentTimeMillis();
+                System.out.println("Excel写入完成，耗时: " + (writeEndTime - writeStartTime) + "ms");
+            }
+            
+            long endTime = System.currentTimeMillis();
+            System.out.println("多线程查询导出完成（Submit方式），总耗时: " + (endTime - startTime) + "ms");
+            
+        } catch (Exception e) {
+            System.err.println("多线程查询导出过程中发生错误: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("多线程查询导出过程中发生错误: " + e.getMessage(), e);
         }
     }
 }

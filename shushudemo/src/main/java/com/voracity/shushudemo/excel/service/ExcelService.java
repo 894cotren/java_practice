@@ -42,4 +42,20 @@ public interface ExcelService {
      * @param count 导出数据条数
      */
     void exportPhoneNumbersPaged(HttpServletResponse response, int count);
+
+    /**
+     * 多线程分页查询 + 单线程写入导出
+     * 使用多线程并发查询数据，单线程顺序写入Excel
+     * @param response HTTP响应
+     * @param count 导出数据量
+     */
+    void exportPhoneNumbersMultiThreadQuery(HttpServletResponse response, int count);
+
+    /**
+     * 多线程分页查询 + 单线程写入导出（使用submit方式）
+     * 使用线程池submit方法提交任务，适合熟悉Future接口的开发者
+     * @param response HTTP响应
+     * @param count 导出数据量
+     */
+    void exportPhoneNumbersMultiThreadQueryWithSubmit(HttpServletResponse response, int count);
 }
