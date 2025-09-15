@@ -46,6 +46,16 @@ public class PhoneNumbersServiceImpl extends ServiceImpl<PhoneNumbersMapper, Pho
             return new ArrayList<>();
         }
     }
+
+    @Override
+    public List<PhoneNumbers> selectByCursorPagingOptimized(int lastId, int pageSize) {
+        try {
+            return baseMapper.selectByCursorPagingOptimized(lastId, pageSize);
+        } catch (Exception e) {
+            log.error("优化分页查询失败，lastId: {}, pageSize: {}", lastId, pageSize, e);
+            return new ArrayList<>();
+        }
+    }
 }
 
 

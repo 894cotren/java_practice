@@ -28,4 +28,13 @@ public interface PhoneNumbersService extends IService<PhoneNumbers> {
      * @return 分页数据列表
      */
     List<PhoneNumbers> selectByCursorPaging(int lastId, int pageSize);
+
+    /**
+     * 优化的分页查询方法
+     * 使用子查询优化，提高查询性能
+     * @param lastId 上一页最后一条记录的ID
+     * @param pageSize 每页大小
+     * @return 分页数据列表
+     */
+    List<PhoneNumbers> selectByCursorPagingOptimized(int lastId, int pageSize);
 }

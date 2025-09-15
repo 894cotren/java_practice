@@ -482,6 +482,157 @@ public class ExcelServiceImpl implements ExcelService {
     }
 
     @Override
+    public void exportPhoneNumbersOptimized(HttpServletResponse response, int count) {
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            // 设置响应头
+            response.setContentType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            response.setCharacterEncoding("utf-8");
+            String fileName = URLEncoder.encode("电话号码数据_优化导出_" + System.currentTimeMillis(), "UTF-8");
+            response.setHeader("Content-disposition", "attachment;filename*=utf-8''" + fileName + ".xlsx");
+            
+            // 限制最大导出数量，避免Excel行数限制
+            int maxRows = 1000000; // Excel最大支持1048576行，我们限制为100万行
+            if (count > maxRows) {
+                count = maxRows;
+                System.out.println("数据量超过限制，调整为最大导出: " + maxRows + " 条");
+            }
+            
+            // 分页参数
+            int pageSize = 20000; // 每页2万条数据
+            int batchSize = 5; // 每批5次分页查询
+            int totalPages = (count + pageSize - 1) / pageSize;
+            int totalBatches = (totalPages + batchSize - 1) / batchSize;
+            
+            System.out.println("开始优化分批导出，总数据量: " + count + "，总页数: " + totalPages + 
+                             "，每页: " + pageSize + "，每批: " + batchSize + " 页，总批数: " + totalBatches);
+            
+            // 使用信号量控制数据库连接数
+            Semaphore dbSemaphore = new Semaphore(5); // 最多5个并发查询
+            
+            // 使用分批写入的方式
+            try (ExcelWriter excelWriter = EasyExcel.write(response.getOutputStream(), PhoneNumbersExportDTO.class).build()) {
+                WriteSheet writeSheet = EasyExcel.writerSheet("电话号码数据").build();
+                
+                int lastId = 0; // 游标起始ID
+                int processedPages = 0;
+                
+                // 分批处理
+                for (int batch = 0; batch < totalBatches; batch++) {
+                    int currentBatch = batch + 1;
+                    int currentBatchSize = Math.min(batchSize, totalPages - processedPages);
+                    
+                    System.out.println("开始处理第 " + currentBatch + " 批，包含 " + currentBatchSize + " 页数据");
+                    
+                    // 异步查询当前批次的所有页面
+                    List<CompletableFuture<List<PhoneNumbersExportDTO>>> futures = new ArrayList<>();
+                    
+                    // 计算当前批次的起始ID列表
+                    List<Integer> startIds = new ArrayList<>();
+                    for (int page = 0; page < currentBatchSize; page++) {
+                        int startId = lastId + (page * pageSize);
+                        startIds.add(startId);
+                    }
+                    
+                    for (int page = 0; page < currentBatchSize; page++) {
+                        int pageIndex = processedPages + page + 1;
+                        int startId = startIds.get(page);
+                        
+                        CompletableFuture<List<PhoneNumbersExportDTO>> future = CompletableFuture.supplyAsync(() -> {
+                            try {
+                                dbSemaphore.acquire(); // 获取数据库连接
+                                
+                                long pageStartTime = System.currentTimeMillis();
+                                
+                                // 使用优化的分页查询
+                                List<PhoneNumbers> data = phoneNumbersService.selectByCursorPagingOptimized(startId, pageSize);
+                                
+                                if (data.isEmpty()) {
+                                    System.out.println("第 " + pageIndex + " 页无数据");
+                                    return new ArrayList<>();
+                                }
+                                
+                                // 转换为DTO
+                                List<PhoneNumbersExportDTO> pageData = data.stream()
+                                        .map(PhoneNumbersExportDTO::fromEntity)
+                                        .collect(Collectors.toList());
+                                
+                                long pageEndTime = System.currentTimeMillis();
+                                System.out.println("第 " + pageIndex + " 页查询完成，数据量: " + pageData.size() + 
+                                                 "，耗时: " + (pageEndTime - pageStartTime) + "ms");
+                                
+                                return pageData;
+                                
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                System.err.println("第 " + pageIndex + " 页查询被中断");
+                                return new ArrayList<>();
+                            } catch (Exception e) {
+                                System.err.println("第 " + pageIndex + " 页查询失败: " + e.getMessage());
+                                return new ArrayList<>();
+                            } finally {
+                                dbSemaphore.release(); // 释放数据库连接
+                            }
+                        }, exportQueryExecutor);
+                        
+                        futures.add(future);
+                    }
+                    
+                    // 等待当前批次所有查询完成
+                    System.out.println("等待第 " + currentBatch + " 批查询完成...");
+                    List<PhoneNumbersExportDTO> currentBatchData = new ArrayList<>();
+                    
+                    for (int i = 0; i < futures.size(); i++) {
+                        try {
+                            List<PhoneNumbersExportDTO> pageData = futures.get(i).get();
+                            currentBatchData.addAll(pageData);
+                            System.out.println("第 " + (processedPages + i + 1) + " 页数据已合并，当前批次数据量: " + currentBatchData.size());
+                        } catch (InterruptedException | ExecutionException e) {
+                            System.err.println("获取第 " + (processedPages + i + 1) + " 页数据失败: " + e.getMessage());
+                        }
+                    }
+                    
+                    // 更新游标（使用最后一条数据的ID）
+                    if (!currentBatchData.isEmpty()) {
+                        // 由于是异步查询，我们需要重新计算lastId
+                        lastId = lastId + (currentBatchSize * pageSize);
+                    }
+                    
+                    // 立即写入当前批次数据到Excel
+                    if (!currentBatchData.isEmpty()) {
+                        long writeStartTime = System.currentTimeMillis();
+                        excelWriter.write(currentBatchData, writeSheet);
+                        long writeEndTime = System.currentTimeMillis();
+                        
+                        System.out.println("第 " + currentBatch + " 批写入完成，数据量: " + currentBatchData.size() + 
+                                         "，写入耗时: " + (writeEndTime - writeStartTime) + "ms");
+                    }
+                    
+                    // 清理内存
+                    currentBatchData.clear();
+                    futures.clear();
+                    processedPages += currentBatchSize;
+                    
+                    // 每批处理完后强制GC
+                    System.gc();
+                    System.out.println("第 " + currentBatch + " 批处理完成，执行GC，已处理页数: " + processedPages + "/" + totalPages);
+                }
+                
+                System.out.println("所有批次处理完成，Excel文件生成完毕");
+            }
+            
+            long endTime = System.currentTimeMillis();
+            System.out.println("优化分批导出完成，总耗时: " + (endTime - startTime) + "ms");
+            
+        } catch (Exception e) {
+            System.err.println("优化分批导出过程中发生错误: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("优化分批导出过程中发生错误: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
     public void exportPhoneNumbersMultiThreadQueryWithSubmit(HttpServletResponse response, int count) {
         long startTime = System.currentTimeMillis();
         

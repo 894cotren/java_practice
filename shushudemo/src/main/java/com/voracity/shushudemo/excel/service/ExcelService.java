@@ -58,4 +58,13 @@ public interface ExcelService {
      * @param count 导出数据量
      */
     void exportPhoneNumbersMultiThreadQueryWithSubmit(HttpServletResponse response, int count);
+
+    /**
+     * 优化的分批导出方法
+     * 每页2万条数据，每批5次分页查询，使用子查询优化SQL
+     * 避免内存溢出，提高导出效率
+     * @param response HTTP响应
+     * @param count 导出数据量
+     */
+    void exportPhoneNumbersOptimized(HttpServletResponse response, int count);
 }
