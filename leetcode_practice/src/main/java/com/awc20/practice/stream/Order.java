@@ -1,5 +1,12 @@
 package com.awc20.practice.stream;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
+
 // 订单类
 @Data
 @AllArgsConstructor

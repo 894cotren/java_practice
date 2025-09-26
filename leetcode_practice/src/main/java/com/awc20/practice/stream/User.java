@@ -1,5 +1,8 @@
 package com.awc20.practice.stream;
 
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
 import java.math.BigDecimal;
 
 // 用户类
@@ -12,4 +15,7 @@ class User {
     private String gender;    // 性别（男/女）
     private String city;      // 所在城市
     private BigDecimal salary;// 月薪
+
+    public User(long l, String 赵六, int i, String 男, String 广州, BigDecimal bigDecimal) {
+    }
 }
