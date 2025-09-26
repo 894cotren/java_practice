@@ -1,47 +1,66 @@
 package com.awc20.practice.leetcode;
 
+import com.sun.jdi.Value;
+
 import java.lang.reflect.Array;
+import java.security.Key;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class LeetCodeDraft {
+
+    {
+
+    }
 
     public static void main(String[] args) {
         System.out.println(MyInterface.getHello());
     }
 
+
     class Solution {
-        public void setZeroes(int[][] matrix) {
-            //解法1： 标记法；
-            //
-            //1. 创建行和列的各自记录行号的数组，set；
-            //2. 遍历二维数组，如果元素是0，那么记录行和列；
-            //3. 第二次遍历数组，判断当前行号和列号是否在set集合里，在的话进行一个置零；
+        public List<List<Integer>> permute(int[] nums) {
+            int len = nums.length;
+            boolean[] mirror = new boolean[len];
+            int depth = 0;
+            List<List<Integer>> result = new ArrayList<>();
+            List<Integer> elem = new ArrayList<>();
+            recursion(len,depth,nums,mirror,result,elem);
+            return result;
+        }
 
-            //1. 创建行和列的各自记录行号的数组，set；
-            int rowLength = matrix.length;
-            int colLength = matrix[0].length;
-            Set<Integer> colSet= new HashSet<>(colLength);
-            Set<Integer> rowSet= new HashSet<>(rowLength);
-
-            for (int i = 0; i < rowLength; i++) {
-                for (int j = 0; j < colLength; j++) {
-                    if (matrix[i][j]==0){
-                        //2. 遍历二维数组，如果元素是0，那么记录行和列；
-                        rowSet.add(i);
-                        colSet.add(j);
-                    }
-                }
+        private void recursion(int len, int depth, int[] nums, boolean[] mirror, List<List<Integer>> result, List<Integer> elem) {
+            if (depth==len){
+                //记录
+                result.add(new ArrayList<>(elem));
+                return;
             }
 
-            for (int i = 0; i < rowLength; i++) {
-                for (int j = 0; j < colLength; j++) {
-                    if (rowSet.contains(i) || colSet.contains(j)){
-                        matrix[i][j]=0;
-                    }
+            for (int i = 0; i < nums.length; i++) {
+                if (mirror[i]){
+                    //如果使用过了就下一个
+                    continue;
                 }
+                //没使用就收录,标记，并进行递归
+                elem.add(nums[i]);
+                mirror[i]=true;
+                recursion(len,depth+1,nums,mirror,result,elem);
+                //出来了进行一个擦除
+                mirror[i]=false;
+                elem.remove(elem.size()-1);
             }
-
         }
     }
-    
+
+    public class ListNode {
+        int val;
+        ListNode next;
+        ListNode(int x) {
+            val = x;
+            next = null;
+        }
+    }
+
 }
